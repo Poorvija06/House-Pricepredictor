@@ -1,0 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;450;500;600;700;850&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+:root {
+  --font-sans-family: "Poppins", "Inter", sans-serif;
+  --font-mono-family: "JetBrains Mono", monospace;
+}
+
+@theme {
+  --font-sans: var(--font-sans-family), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-sans-family), sans-serif;
+  --font-mono: var(--font-mono-family), monospace;
+  
+  /* Primary Green Colors for UI */
+  --color-primary-green: #10b981;
+  --color-primary-green-hover: #059669;
+  --color-primary-green-dark: #047857;
+  --color-primary-green-light: #ecfdf5;
+}
+
+body {
+  font-family: var(--font-sans-family);
+  background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);
+  color: #1e293b;
+  min-height: 100vh;
+}
+
+/* Base modifications for beautiful forms and scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #10b981;
+}

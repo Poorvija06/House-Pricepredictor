@@ -1,0 +1,8 @@
+{
+  "name": "Remix: AI House Price Predictor",
+  "description": "An AI House Price Prediction System that predicts residential property prices based on real estate parameters including location, area, bedrooms, bathrooms, furnishing status, and property age.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
