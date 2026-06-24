@@ -135,22 +135,79 @@ def predict():
 @app.route('/api/chatbot', methods=['POST'])
 def chatbot():
     data = request.get_json()
-    question = data.get("userQuestion", "").lower()
 
-    # simple rule-based AI (demo working fix)
-    if "age" in question:
-        reply = "Older properties usually have lower value due to maintenance cost, but heritage/location can increase value."
-    elif "location" in question:
-        reply = "Central locations like Anna Nagar & T Nagar have higher demand and price appreciation."
-    elif "value" in question:
-        reply = "Property value depends on sqft, location, age, and amenities."
+    question_raw = data.get("userQuestion", "")
+    question = question_raw.lower()
+
+    def respond(answer):
+        return jsonify({
+            "status": "success",
+            "reply": answer
+        })
+
+    # ---------------- NORMALIZATION HELP ----------------
+    q = question.replace("?", "").strip()
+
+    # ---------------- SMART MATCHING ----------------
+
+    # BHK
+    if "bhk" in q or "bedroom" in q:
+        return respond(
+            "BHK (Bedroom, Hall, Kitchen) defines the structure of a house. "
+            "For example, a 2BHK means 2 bedrooms, a hall (living room), and a kitchen. "
+            "More BHK usually means larger space and higher value depending on location and demand."
+        )
+
+    # BUILDING AGE
+    elif "age" in q or "old" in q or "new" in q:
+        return respond(
+            "Building age affects property value significantly. "
+            "New properties usually have higher value due to modern construction and low maintenance cost. "
+            "Older properties may reduce in price due to wear and tear, but prime location can still keep prices high."
+        )
+
+    # LOCATION
+    elif "location" in q or "central" in q or "anna nagar" in q or "t nagar" in q:
+        return respond(
+            "Location is one of the strongest factors in property pricing. "
+            "Central areas like Anna Nagar and T Nagar have higher demand, better infrastructure, schools, transport, and commercial access, "
+            "which increases property appreciation significantly."
+        )
+
+    # PRICE PREDICTION MODEL
+    elif "how" in q and "price" in q:
+        return respond(
+            "The system uses a machine learning model trained on historical Chennai housing data. "
+            "It considers features like square feet, bedrooms, bathrooms, parking, location, and property age. "
+            "Based on these inputs, it predicts a realistic market price using pattern recognition."
+        )
+
+    # PROPERTY APPRECIATION (YOUR QUESTION FIX)
+    elif "appreciation" in q or "increase property" in q or "increase value" in q or "factors" in q:
+        return respond(
+            "Property appreciation depends on multiple key factors:\n\n"
+            "1. Location – Central areas like Anna Nagar or T Nagar increase value faster.\n"
+            "2. Infrastructure – Good roads, metro access, schools, hospitals increase demand.\n"
+            "3. Property condition – New or well-maintained houses appreciate more.\n"
+            "4. Amenities – Parking, water supply, security add value.\n"
+            "5. Market demand – High demand areas naturally increase price over time.\n\n"
+            "So overall, location + infrastructure + demand are the strongest drivers of appreciation."
+        )
+
+    # HANDLE BAD SPELLING (IMPORTANT FIX)
+    elif "futures increase property" in q or "futures increase" in q or "feature increase" in q:
+        return respond(
+            "Property value increases due to features such as location, square footage, number of bedrooms, "
+            "quality of construction, parking availability, water supply, and nearby infrastructure."
+        )
+
+    # DEFAULT RESPONSE
     else:
-        reply = "I can help with property pricing, features, and valuation logic."
-
-    return jsonify({
-        "status": "success",
-        "reply": reply
-    })
+        return respond(
+            "I am your Real Estate AI Assistant. "
+            "You can ask about BHK, property pricing, appreciation factors, building age impact, or location influence. "
+            "Try asking: 'What factors increase property value?' or 'How does location affect price?'"
+        )
 # ---------------- CONTACT POST ----------------
 @app.route('/api/contacts', methods=['POST'])
 def save_contact():
