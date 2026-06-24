@@ -6,10 +6,11 @@ import pickle
 import numpy as np
 from flask import Flask, request, jsonify, send_from_directory
 
+# ---------------- APP INIT ----------------
 app = Flask(__name__, static_folder='dist', static_url_path='')
 app.secret_key = os.environ.get("SECRET_KEY", "chennai_super_secret_property_key")
 
-# Config
+# ---------------- CONFIG ----------------
 DB_FILE = os.path.join('data', 'housing_contacts.db')
 MODEL_PATH = os.path.join('data', 'model.pkl')
 
@@ -33,7 +34,7 @@ def init_db():
 
 init_db()
 
-# ---------------- MODEL ----------------
+# ---------------- MODEL LOADER ----------------
 def load_ml_model():
     if os.path.exists(MODEL_PATH):
         try:
@@ -43,27 +44,22 @@ def load_ml_model():
             print("Model load error:", e)
     return None
 
-# ---------------- FRONTEND ROUTES (IMPORTANT FIX) ----------------
-
-import os
-from flask import Flask, send_from_directory
-
-app = Flask(__name__, static_folder='dist', static_url_path='')
+# ---------------- FRONTEND (REACT BUILD) ----------------
 
 @app.route('/')
 def serve():
-    return send_from_directory(app.static_folder, 'index.html')
+    return send_from_directory('dist', 'index.html')
 
 @app.route('/<path:path>')
 def static_files(path):
-    file_path = os.path.join(app.static_folder, path)
+    file_path = os.path.join('dist', path)
 
     if os.path.exists(file_path):
-        return send_from_directory(app.static_folder, path)
+        return send_from_directory('dist', path)
 
-    return send_from_directory(app.static_folder, 'index.html')
+    return send_from_directory('dist', 'index.html')
 
-# ---------------- API ----------------
+# ---------------- API: PREDICT ----------------
 
 @app.route('/api/predict', methods=['POST'])
 def predict():
@@ -82,7 +78,7 @@ def predict():
         build_type = data.get('buildType', 'house').lower()
         utility_avail = data.get('utilityAvail', 'allpub').lower()
         street = data.get('street', 'paved').lower()
-        mzzone = data.get('mzzone', 'RL').upper()
+        mzzone = data.get('mzzone', 'RL').lower()
 
         build_year = int(data.get('buildYear', 2015))
         sale_year = int(data.get('saleYear', 2024))
@@ -95,7 +91,7 @@ def predict():
         build_enc = maps['BUILDTYPE'].get(build_type, 0)
         util_enc = maps['UTILITY_AVAIL'].get(utility_avail, 0)
         street_enc = maps['STREET'].get(street, 0)
-        mzzone_enc = maps['MZZONE'].get(mzzone.lower(), 0)
+        mzzone_enc = maps['MZZONE'].get(mzzone, 0)
 
         vector = np.array([[
             area_enc, int_sqft, n_bedroom, n_bathroom,
@@ -107,9 +103,13 @@ def predict():
         predicted_price = int(model.predict(vector)[0])
 
         growth_rates = {
-            'adyar': 0.075, 'chrompet': 0.055, 'karapakkam': 0.045,
-            'kk nagar': 0.060, 'anna nagar': 0.085,
-            't nagar': 0.090, 'velachery': 0.070
+            'adyar': 0.075,
+            'chrompet': 0.055,
+            'karapakkam': 0.045,
+            'kk nagar': 0.060,
+            'anna nagar': 0.085,
+            't nagar': 0.090,
+            'velachery': 0.070
         }
 
         growth = growth_rates.get(area, 0.05)
@@ -129,7 +129,7 @@ def predict():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
 
-# ---------------- CONTACT API ----------------
+# ---------------- API: CONTACT ----------------
 
 @app.route('/api/contacts', methods=['POST'])
 def save_contact():
