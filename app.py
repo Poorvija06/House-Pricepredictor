@@ -9,8 +9,7 @@ from flask_cors import CORS
 
 # ---------------- APP INIT ----------------
 app = Flask(__name__, static_folder='dist', static_url_path='')
-app.secret_key = os.environ.get("SECRET_KEY", "chennai_super_secret_property_key")
-
+app.secret_key = "chennai_super_secret_property_key"
 CORS(app)
 
 # ---------------- PATHS ----------------
@@ -30,28 +29,24 @@ def load_ml_model():
     global model_data
     if model_data is None:
         if os.path.exists(MODEL_PATH):
-            try:
-                with open(MODEL_PATH, 'rb') as f:
-                    model_data = pickle.load(f)
-                print("✅ Model loaded successfully")
-            except Exception as e:
-                print("❌ Model load error:", e)
-                model_data = None
+            with open(MODEL_PATH, 'rb') as f:
+                model_data = pickle.load(f)
+            print("✅ Model loaded successfully")
     return model_data
 
 # ---------------- DB INIT ----------------
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute('''
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS contacts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            email TEXT NOT NULL,
-            message TEXT NOT NULL,
+            name TEXT,
+            email TEXT,
+            message TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
-    ''')
+    """)
     conn.commit()
     conn.close()
 
@@ -70,147 +65,133 @@ def static_files(path):
     return send_from_directory('dist', 'index.html')
 
 # ---------------- HEALTH ----------------
-@app.route('/api/health', methods=['GET'])
+@app.route('/api/health')
 def health():
     return jsonify({"status": "ok"})
 
-# ---------------- METRICS (FIX FOR YOUR ERROR) ----------------
-@app.route('/api/model/metrics', methods=['GET'])
+# ---------------- METRICS FIX ----------------
+@app.route('/api/model/metrics')
 def metrics():
     return jsonify({
         "status": "success",
         "model": "RandomForestRegressor",
-        "message": "Model is running successfully"
+        "message": "Model running successfully"
     })
 
-# ---------------- PREDICT API ----------------
-@app.route('/api/model/predict', methods=['POST', 'OPTIONS'])
-def predict():
-    if request.method == 'OPTIONS':
-        return jsonify({"status": "ok"}), 200
+# ---------------- SAFE ENCODING HELPERS ----------------
+def safe_map(mapping, value):
+    if isinstance(value, str):
+        value = value.lower()
+    return mapping.get(value, 0)
 
+# ---------------- PREDICT ----------------
+@app.route('/api/model/predict', methods=['POST'])
+def predict():
     model_data = load_ml_model()
 
     if not model_data:
-        return jsonify({'status': 'error', 'message': 'Model not found'}), 500
+        return jsonify({"status": "error", "message": "Model not found"}), 500
 
     try:
         data = request.get_json() or {}
 
-        # ✅ FIXED: match training dataset keys
-        location = data.get('location', 'chrompet').lower()
-        int_sqft = float(data.get('intSqft', 1000))
-        n_bedroom = int(data.get('nBedroom', 2))
-        n_bathroom = int(data.get('nBathroom', 1))
+        maps = model_data.get("categorical_mappings", {})
 
-        park_facil = data.get('parkFacil', 'no').lower()
-        build_type = data.get('buildType', 'house').lower()
-        utility_avail = data.get('utilityAvail', 'allpub').lower()
-        street = data.get('street', 'paved').lower()
-        mzzone = data.get('mzzone', 'rl').lower()
-
-        property_age = int(data.get('propertyAge', 5))
-
-        # ✅ FIXED mapping key
-        maps = model_data['mappings']
+        location = data.get("location", "chrompet")
 
         vector = np.array([[
-            maps['LOCATION'].get(location, 0),
-            int_sqft,
-            n_bedroom,
-            n_bathroom,
-            maps['PARK_FACIL'].get(park_facil, 0),
-            maps['BUILDTYPE'].get(build_type, 0),
-            maps['UTILITY_AVAIL'].get(utility_avail, 0),
-            maps['STREET'].get(street, 0),
-            maps['MZZONE'].get(mzzone, 0),
-            property_age
+            safe_map(maps.get("AREA", {}), location),
+
+            float(data.get("intSqft", 1000)),
+            int(data.get("nBedroom", 2)),
+            int(data.get("nBathroom", 1)),
+
+            safe_map(maps.get("PARK_FACIL", {}), data.get("parkFacil", "no")),
+            safe_map(maps.get("BUILDTYPE", {}), data.get("buildType", "house")),
+            safe_map(maps.get("UTILITY_AVAIL", {}), data.get("utilityAvail", "allpub")),
+            safe_map(maps.get("STREET", {}), data.get("street", "paved")),
+            safe_map(maps.get("MZZONE", {}), data.get("mzzone", "rl")),
+
+            int(data.get("propertyAge", 5))
         ]])
 
-        model = model_data['model']
-        predicted_price = int(model.predict(vector)[0])
-
-        growth_rates = {
-            'adyar': 0.075,
-            'chrompet': 0.055,
-            'karapakkam': 0.045,
-            'kk nagar': 0.060,
-            'anna nagar': 0.085,
-            't nagar': 0.090,
-            'velachery': 0.070
-        }
-
-        growth = growth_rates.get(location, 0.05)
+        model = model_data["model"]
+        price = int(model.predict(vector)[0])
 
         return jsonify({
-            'status': 'success',
-            'result': {
-                'predictedPrice': predicted_price,
-                'forecast1Yr': int(predicted_price * (1 + growth)),
-                'forecast3Yr': int(predicted_price * (1 + growth) ** 3),
-                'forecast5Yr': int(predicted_price * (1 + growth) ** 5),
-                'investmentGrade': "Good",
-                'explanation': f"Estimated price for {location.title()} is ₹{predicted_price}"
+            "status": "success",
+            "result": {
+                "predictedPrice": price,
+                "investmentGrade": "Good",
+                "forecast1Yr": int(price * 1.05),
+                "forecast3Yr": int(price * 1.15),
+                "forecast5Yr": int(price * 1.30),
+                "explanation": f"Estimated price for {location}"
             }
         })
 
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        return jsonify({"status": "error", "message": str(e)}), 500
 
-# ---------------- CONTACT API ----------------
-# ---------------- CONTACT API ----------------
+# ---------------- CONTACT POST ----------------
 @app.route('/api/contacts', methods=['POST'])
 def save_contact():
     data = request.get_json() or {}
 
-    name = data.get('name', '').strip()
-    email = data.get('email', '').strip()
-    msg = data.get('message', '').strip()
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO contacts (name,email,message) VALUES (?,?,?)",
+        (data.get('name'), data.get('email'), data.get('message'))
+    )
+    conn.commit()
+    conn.close()
 
-    if not name or not email or not msg:
-        return jsonify({'status': 'error', 'message': 'Missing fields'}), 400
+    return jsonify({"status": "success"})
 
-    try:
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        cursor.execute(
-            'INSERT INTO contacts (name, email, message) VALUES (?, ?, ?)',
-            (name, email, msg)
-        )
-        conn.commit()
-        conn.close()
+# ---------------- CONTACT GET ----------------
+@app.route('/api/contacts', methods=['GET'])
+def get_contacts():
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    cur.execute("SELECT id,name,email,message,created_at FROM contacts ORDER BY id DESC")
+    rows = cur.fetchall()
+    conn.close()
 
-        return jsonify({'status': 'success'})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+    messages = [{
+        "id": r[0],
+        "name": r[1],
+        "email": r[2],
+        "message": r[3],
+        "createdAt": r[4]
+    } for r in rows]
 
+    return jsonify({
+        "status": "success",
+        "messages": messages,
+        "stats": {
+            "total": len(messages),
+            "isSqlite": True
+        }
+    })
 
-# 🔥 ADMIN LOGIN (MUST BE OUTSIDE ANY FUNCTION)
+# ---------------- ADMIN LOGIN ----------------
 @app.route('/api/admin/login', methods=['POST'])
 def admin_login():
-    try:
-        data = request.get_json()
+    data = request.get_json() or {}
 
-        username = data.get('username')
-        password = data.get('password')
-
-        if username == "admin" and password == "admin123":
-            return jsonify({
-                "status": "success",
-                "token": "admin-token-123"
-            })
-
+    if data.get("username") == "admin" and data.get("password") == "admin123":
         return jsonify({
-            "status": "error",
-            "message": "Invalid credentials"
-        }), 401
+            "status": "success",
+            "token": "admin-token-123"
+        })
 
-    except Exception as e:
-        return jsonify({
-            "status": "error",
-            "message": str(e)
-        }), 500
+    return jsonify({
+        "status": "error",
+        "message": "Invalid credentials"
+    }), 401
+
 # ---------------- RUN ----------------
-if __name__ == "__main__":
-    print("🔥 Starting Flask Server...")
-    app.run(host="0.0.0.0", port=10000, debug=True)
+if __name__ == '__main__':
+    print("🔥 Server starting...")
+    app.run(host='0.0.0.0', port=10000, debug=True)
