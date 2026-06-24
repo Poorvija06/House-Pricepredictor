@@ -132,7 +132,25 @@ def predict():
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+@app.route('/api/chatbot', methods=['POST'])
+def chatbot():
+    data = request.get_json()
+    question = data.get("userQuestion", "").lower()
 
+    # simple rule-based AI (demo working fix)
+    if "age" in question:
+        reply = "Older properties usually have lower value due to maintenance cost, but heritage/location can increase value."
+    elif "location" in question:
+        reply = "Central locations like Anna Nagar & T Nagar have higher demand and price appreciation."
+    elif "value" in question:
+        reply = "Property value depends on sqft, location, age, and amenities."
+    else:
+        reply = "I can help with property pricing, features, and valuation logic."
+
+    return jsonify({
+        "status": "success",
+        "reply": reply
+    })
 # ---------------- CONTACT POST ----------------
 @app.route('/api/contacts', methods=['POST'])
 def save_contact():

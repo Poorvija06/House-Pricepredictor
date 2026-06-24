@@ -54,10 +54,12 @@ export default function ChatbotView() {
     setLoading(true);
 
     try {
-      const response = await fetch('/api/chatbot', {
+
+      const response = await fetch(
+  "https://house-price-api.onrender.com/api/chatbot", {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userQuestion: questionText })
+        body: JSON.stringify({ message: questionText })
       });
 
       const data = await response.json();
