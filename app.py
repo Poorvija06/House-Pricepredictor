@@ -9,8 +9,7 @@ import sqlite3
 import pickle
 import numpy as np
 from datetime import datetime
-from flask import Flask, render_code, render_template, request, jsonify, session, redirect, url_path_to_directory, url_for
-
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 app = Flask(__name__)
 app.secret_key = 'chennai_super_secret_property_key'
 
