@@ -1,4 +1,5 @@
 # AI-Based House Price Prediction - Chennai Dataset
+
 import os
 import pandas as pd
 import numpy as np
@@ -8,12 +9,16 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
+
 # Paths
 DATA_DIR = "data"
 CSV_PATH = os.path.join(DATA_DIR, "Chennai housing sale.csv")
 MODEL_PATH = os.path.join(DATA_DIR, "model.pkl")
 
 
+# ----------------------------
+# DATA CLEANING FUNCTION
+# ----------------------------
 def clean_data(df):
     print("Dataset columns:", df.columns.tolist())
 
@@ -21,34 +26,48 @@ def clean_data(df):
     df['N_BEDROOM'] = df['N_BEDROOM'].fillna(df['N_BEDROOM'].mode()[0])
     df['N_BATHROOM'] = df['N_BATHROOM'].fillna(df['N_BATHROOM'].mode()[0])
 
-    # LOCATION cleaning (IMPORTANT FIX)
+    # Clean LOCATION
     df['LOCATION'] = df['LOCATION'].astype(str).str.strip().str.lower()
 
     # Convert dates
     df['DATE_BUILD'] = pd.to_datetime(df['DATE_BUILD'], errors='coerce')
     df['DATE_SALE'] = pd.to_datetime(df['DATE_SALE'], errors='coerce')
 
-    # Property Age
+    # Property age
     df['PROPERTY_AGE'] = df['DATE_SALE'].dt.year - df['DATE_BUILD'].dt.year
     df['PROPERTY_AGE'] = df['PROPERTY_AGE'].fillna(df['PROPERTY_AGE'].median())
 
     return df
 
 
+# ----------------------------
+# TRAIN MODEL FUNCTION
+# ----------------------------
 def train_model():
+
     # Load dataset
     df = pd.read_csv(CSV_PATH)
 
+    # Clean data
     df = clean_data(df)
 
     # Categorical columns
-    categorical_cols = ['LOCATION', 'PARK_FACIL', 'BUILDTYPE', 'UTILITY_AVAIL', 'STREET', 'MZZONE']
+    categorical_cols = [
+        'LOCATION',
+        'PARK_FACIL',
+        'BUILDTYPE',
+        'UTILITY_AVAIL',
+        'STREET',
+        'MZZONE'
+    ]
 
     mappings = {}
 
+    # Encode categorical columns
     for col in categorical_cols:
         df[col] = df[col].astype(str).str.lower()
         unique_vals = df[col].unique()
+
         mappings[col] = {val: idx for idx, val in enumerate(unique_vals)}
         df[col] = df[col].map(mappings[col])
 
@@ -71,11 +90,11 @@ def train_model():
     X = df[features]
     y = df[target]
 
-    # Fill missing
+    # Handle missing values
     X = X.fillna(0)
     y = y.fillna(y.median())
 
-    # Split
+    # Split dataset
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
     )
@@ -89,7 +108,7 @@ def train_model():
 
     model.fit(X_train, y_train)
 
-    # Prediction
+    # Predictions
     y_pred = model.predict(X_test)
 
     # Metrics
@@ -103,7 +122,9 @@ def train_model():
     print("R2   :", r2)
     print("=============================\n")
 
-    # Save model
+    # ----------------------------
+    # SAVE MODEL (IMPORTANT FIXED PART)
+    # ----------------------------
     model_data = {
         "model": model,
         "features": features,
@@ -113,8 +134,11 @@ def train_model():
     with open(MODEL_PATH, "wb") as f:
         pickle.dump(model_data, f)
 
-    print("Model saved successfully!")
+    print("Model saved successfully at:", MODEL_PATH)
 
 
+# ----------------------------
+# RUN TRAINING
+# ----------------------------
 if __name__ == "__main__":
     train_model()
