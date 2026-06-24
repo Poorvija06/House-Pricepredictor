@@ -1,26 +1,21 @@
 # -*- coding: utf-8 -*-
-"""
-AI-Based House Price Prediction and Future Value Forecasting System
-Flask Backend Application Server
-"""
 
 import os
 import sqlite3
 import pickle
 import numpy as np
-from datetime import datetime
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for
-app = Flask(__name__)
-app.secret_key = 'chennai_super_secret_property_key'
+from flask import Flask, request, jsonify, send_from_directory
+
+app = Flask(__name__, static_folder='dist', static_url_path='')
+app.secret_key = os.environ.get("SECRET_KEY", "chennai_super_secret_property_key")
 
 # Config
 DB_FILE = os.path.join('data', 'housing_contacts.db')
 MODEL_PATH = os.path.join('data', 'model.pkl')
 
-# Ensure directories exist
 os.makedirs('data', exist_ok=True)
 
-# Initialize SQLite database
+# ---------------- DB INIT ----------------
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -38,52 +33,55 @@ def init_db():
 
 init_db()
 
-# Load Python Model (pkl) helper
+# ---------------- MODEL ----------------
 def load_ml_model():
     if os.path.exists(MODEL_PATH):
         try:
             with open(MODEL_PATH, 'rb') as f:
                 return pickle.load(f)
         except Exception as e:
-            print("Failed to load pickle model:", e)
+            print("Model load error:", e)
     return None
 
+# ---------------- FRONTEND ROUTES (IMPORTANT FIX) ----------------
+
+from flask import send_from_directory
+
 @app.route('/')
-def home():
-    return "<h1>Chennai AI House Forecast System Running Successfully</h1><p>Please launch the full-stack interactive client view inside the preview iframe.</p>"
+def serve():
+    return send_from_directory('dist', 'index.html')
+
+@app.route('/<path:path>')
+def static_files(path):
+    return send_from_directory('dist', path)
+
+# ---------------- API ----------------
 
 @app.route('/api/predict', methods=['POST'])
 def predict():
     data = request.get_json() or {}
     model_data = load_ml_model()
-    
+
     if not model_data:
-        return jsonify({
-            'status': 'error', 
-            'message': 'Model pkl file not found. Please run train_model.py first.'
-        })
+        return jsonify({'status': 'error', 'message': 'Model not found'})
 
     try:
-        # Extract features
         area = data.get('area', 'chrompet').lower()
         int_sqft = float(data.get('intSqft', 1000))
         n_bedroom = int(data.get('nBedroom', 2))
         n_bathroom = int(data.get('nBathroom', 1))
-        park_facil = data.get('parkFacil', 'No').lower()
+        park_facil = data.get('parkFacil', 'no').lower()
         build_type = data.get('buildType', 'house').lower()
         utility_avail = data.get('utilityAvail', 'allpub').lower()
         street = data.get('street', 'paved').lower()
         mzzone = data.get('mzzone', 'RL').upper()
-        
-        # Calculate Property Age
+
         build_year = int(data.get('buildYear', 2015))
         sale_year = int(data.get('saleYear', 2024))
         property_age = max(0, sale_year - build_year)
 
-        # Map to label encoded indices
         maps = model_data['categorical_mappings']
-        
-        # Map values safely with defaults
+
         area_enc = maps['AREA'].get(area, 0)
         park_enc = maps['PARK_FACIL'].get(park_facil, 0)
         build_enc = maps['BUILDTYPE'].get(build_type, 0)
@@ -91,50 +89,39 @@ def predict():
         street_enc = maps['STREET'].get(street, 0)
         mzzone_enc = maps['MZZONE'].get(mzzone.lower(), 0)
 
-        # Form feature vector matches [AREA, INT_SQFT, N_BEDROOM, N_BATHROOM, PARK_FACIL, BUILDTYPE, UTILITY_AVAIL, STREET, MZZONE, PROPERTY_AGE]
         vector = np.array([[
-            area_enc, int_sqft, n_bedroom, n_bathroom, park_enc, 
-            build_enc, util_enc, street_enc, mzzone_enc, property_age
+            area_enc, int_sqft, n_bedroom, n_bathroom,
+            park_enc, build_enc, util_enc, street_enc,
+            mzzone_enc, property_age
         ]])
 
         model = model_data['model']
         predicted_price = int(model.predict(vector)[0])
 
-        # Growth factors based on localized profiles
         growth_rates = {
-            'adyar': 0.075, 'chrompet': 0.055, 'karapakkam': 0.045, 
-            'kk nagar': 0.060, 'anna nagar': 0.085, 't nagar': 0.090, 
-            'velachery': 0.070
+            'adyar': 0.075, 'chrompet': 0.055, 'karapakkam': 0.045,
+            'kk nagar': 0.060, 'anna nagar': 0.085,
+            't nagar': 0.090, 'velachery': 0.070
         }
+
         growth = growth_rates.get(area, 0.05)
-
-        # Composing 1, 3, 5 year forecasts
-        forecast_1yr = int(predicted_price * ((1 + growth) ** 1))
-        forecast_3yr = int(predicted_price * ((1 + growth) ** 3))
-        forecast_5yr = int(predicted_price * ((1 + growth) ** 5))
-
-        # Grades
-        if growth >= 0.08:
-            grade = "Excellent" if property_age < 8 else "Good"
-        elif growth >= 0.06:
-            grade = "Good" if property_age < 15 else "Average"
-        else:
-            grade = "Poor" if property_age > 12 else "Average"
 
         return jsonify({
             'status': 'success',
             'result': {
                 'predictedPrice': predicted_price,
-                'forecast1Yr': forecast_1yr,
-                'forecast3Yr': forecast_3yr,
-                'forecast5Yr': forecast_5yr,
-                'investmentGrade': grade,
-                'explanation': f"The scikit-learn Random Forest model predicted a price of Rs. {predicted_price:,.2f} with a 5-year forecasted equity target of Rs. {forecast_5yr:,.2f}. Rated as '{grade}' based on {area.upper()} growth indices."
+                'forecast1Yr': int(predicted_price * (1 + growth)),
+                'forecast3Yr': int(predicted_price * (1 + growth) ** 3),
+                'forecast5Yr': int(predicted_price * (1 + growth) ** 5),
+                'investmentGrade': "Good",
+                'explanation': f"Predicted price Rs.{predicted_price}"
             }
         })
 
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
+
+# ---------------- CONTACT API ----------------
 
 @app.route('/api/contacts', methods=['POST'])
 def save_contact():
@@ -144,17 +131,24 @@ def save_contact():
     msg = data.get('message', '').strip()
 
     if not name or not email or not msg:
-        return jsonify({'status': 'error', 'message': 'All form elements are mandatory.'}), 400
+        return jsonify({'status': 'error', 'message': 'Missing fields'}), 400
 
     try:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
-        cursor.execute('INSERT INTO contacts (name, email, message) VALUES (?, ?, ?)', (name, email, msg))
+        cursor.execute(
+            'INSERT INTO contacts (name, email, message) VALUES (?, ?, ?)',
+            (name, email, msg)
+        )
         conn.commit()
         conn.close()
-        return jsonify({'status': 'success', 'message': 'Message written dynamically to SQLite!'})
+
+        return jsonify({'status': 'success'})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+# ---------------- RUN ----------------
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port, debug=False)
