@@ -45,15 +45,23 @@ def load_ml_model():
 
 # ---------------- FRONTEND ROUTES (IMPORTANT FIX) ----------------
 
-from flask import send_from_directory
+import os
+from flask import Flask, send_from_directory
+
+app = Flask(__name__, static_folder='dist', static_url_path='')
 
 @app.route('/')
 def serve():
-    return send_from_directory('dist', 'index.html')
+    return send_from_directory(app.static_folder, 'index.html')
 
 @app.route('/<path:path>')
 def static_files(path):
-    return send_from_directory('dist', path)
+    file_path = os.path.join(app.static_folder, path)
+
+    if os.path.exists(file_path):
+        return send_from_directory(app.static_folder, path)
+
+    return send_from_directory(app.static_folder, 'index.html')
 
 # ---------------- API ----------------
 
