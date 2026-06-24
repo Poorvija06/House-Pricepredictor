@@ -41,46 +41,57 @@ export default function PredictFormView() {
     }));
   };
 
-  const handlePredict = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
+ const handlePredict = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setLoading(true);
+  setError(null);
 
-    // Prepare payload. Map client variables and pre-fill underlying Random Forest features that the algorithm expects
-    const payload = {
-      area: formData.area,
-      intSqft: formData.intSqft,
-      nBedroom: formData.nBedroom,
-      nBathroom: formData.nBathroom,
-      parkFacil: formData.parkFacil,
-      propertyAge: formData.propertyAge,
-      // Pass clean defaults for underlying dataset categorical encodings
-      buildType: 'house',
-      utilityAvail: 'allpub',
-      street: 'paved',
-      mzzone: 'rl'
-    };
+  const payload = {
+    area: formData.area.toLowerCase(),
+    intSqft: formData.intSqft,
+    nBedroom: formData.nBedroom,
+    nBathroom: formData.nBathroom,
+    parkFacil: formData.parkFacil.toLowerCase(),
+    buildType: "house",
+    utilityAvail: "allpub",
+    street: "paved",
+    mzzone: "rl",
 
-    try {
-      const response = await fetch('/api/model/predict', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      
-      const data = await response.json();
-      if (data.status === 'success') {
-        setResult(data.result);
-      } else {
-        setError(data.message || 'Failed to estimate property value.');
-      }
-    } catch (err: any) {
-      setError('Evaluation service is temporarily offline. Please verify that the local development server is active.');
-    } finally {
-      setLoading(false);
-    }
+    // 🔥 ADD THESE (backend safe)
+    buildYear: 2015,
+    saleYear: 2024
   };
 
+  try {
+    const response = await fetch(
+      "https://house-pricepredictor.onrender.com/api/model/predict",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Server Error: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.status === "success") {
+      setResult(data.result);
+    } else {
+      setError(data.message || "Prediction failed");
+    }
+
+  } catch (err) {
+    setError("Backend unreachable / CORS / API issue");
+  } finally {
+    setLoading(false);
+  }
+};
   // Helper function to format prices in Indian Rupees Lakhs & Crores
   const formatINR = (value: number) => {
   if (value >= 10000000) {
@@ -341,11 +352,14 @@ export default function PredictFormView() {
                 <div className="absolute top-0 right-0 h-24 w-24 bg-emerald-500/5 rounded-full blur-2xl" />
                 
                 <div className="flex justify-between items-center relative z-10">
-                  <span className="text-[9px] font-semibold tracking-widest text-emerald-600 uppercase">ESTIMATED ASSET PRICE</span>
-                  <div className={`text-[10px] font-bold tracking-wider px-2.5 py-1 rounded-full uppercase ${getInvestmentColorClass(result.investmentGrade)}`}>
-                    ★ {result.investmentGrade} Rating
-                  </div>
-                </div>
+  <span className="text-[9px] font-semibold tracking-widest text-emerald-600 uppercase">
+    ESTIMATED ASSET PRICE
+  </span>
+
+  <div className={`text-[10px] font-bold tracking-wider px-2.5 py-1 rounded-full uppercase ${getInvestmentColorClass(result.investmentGrade)}`}>
+    ★ {result.investmentGrade} Rating
+  </div>
+</div>
 
                 <div className="mt-4 relative z-10">
                   <span className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight leading-none block">

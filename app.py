@@ -5,16 +5,35 @@ import sqlite3
 import pickle
 import numpy as np
 from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
 
 # ---------------- APP INIT ----------------
 app = Flask(__name__, static_folder='dist', static_url_path='')
 app.secret_key = os.environ.get("SECRET_KEY", "chennai_super_secret_property_key")
+
+# ✅ CORS FIX (IMPORTANT for Render + frontend fetch)
+CORS(app)
 
 # ---------------- CONFIG ----------------
 DB_FILE = os.path.join('data', 'housing_contacts.db')
 MODEL_PATH = os.path.join('data', 'model.pkl')
 
 os.makedirs('data', exist_ok=True)
+
+# ---------------- LOAD MODEL ONCE (IMPORTANT FIX) ----------------
+model_data = None
+
+def load_ml_model():
+    global model_data
+    if model_data is None:
+        if os.path.exists(MODEL_PATH):
+            try:
+                with open(MODEL_PATH, 'rb') as f:
+                    model_data = pickle.load(f)
+            except Exception as e:
+                print("Model load error:", e)
+                model_data = None
+    return model_data
 
 # ---------------- DB INIT ----------------
 def init_db():
@@ -34,18 +53,7 @@ def init_db():
 
 init_db()
 
-# ---------------- MODEL LOADER ----------------
-def load_ml_model():
-    if os.path.exists(MODEL_PATH):
-        try:
-            with open(MODEL_PATH, 'rb') as f:
-                return pickle.load(f)
-        except Exception as e:
-            print("Model load error:", e)
-    return None
-
-# ---------------- FRONTEND (REACT BUILD) ----------------
-
+# ---------------- FRONTEND ----------------
 @app.route('/')
 def serve():
     return send_from_directory('dist', 'index.html')
@@ -53,50 +61,57 @@ def serve():
 @app.route('/<path:path>')
 def static_files(path):
     file_path = os.path.join('dist', path)
-
     if os.path.exists(file_path):
         return send_from_directory('dist', path)
-
     return send_from_directory('dist', 'index.html')
 
-# ---------------- API: PREDICT ----------------
+# ---------------- HEALTH CHECK (optional but useful) ----------------
+@app.route('/api/health', methods=['GET'])
+def health():
+    return jsonify({"status": "ok"})
 
-@app.route('/api/predict', methods=['POST'])
+
+# ---------------- PREDICT API ----------------
+@app.route('/api/model/predict', methods=['POST', 'OPTIONS'])
 def predict():
-    data = request.get_json() or {}
+    if request.method == 'OPTIONS':
+        return jsonify({"status": "ok"}), 200
+
     model_data = load_ml_model()
 
     if not model_data:
         return jsonify({'status': 'error', 'message': 'Model not found'})
 
     try:
+        data = request.get_json() or {}
+
         area = data.get('area', 'chrompet').lower()
         int_sqft = float(data.get('intSqft', 1000))
         n_bedroom = int(data.get('nBedroom', 2))
         n_bathroom = int(data.get('nBathroom', 1))
+
         park_facil = data.get('parkFacil', 'no').lower()
         build_type = data.get('buildType', 'house').lower()
         utility_avail = data.get('utilityAvail', 'allpub').lower()
         street = data.get('street', 'paved').lower()
-        mzzone = data.get('mzzone', 'RL').lower()
+        mzzone = data.get('mzzone', 'rl').lower()
 
-        build_year = int(data.get('buildYear', 2015))
-        sale_year = int(data.get('saleYear', 2024))
-        property_age = max(0, sale_year - build_year)
+        # ✅ FIX: accept frontend propertyAge directly
+        property_age = int(data.get('propertyAge', 5))
 
         maps = model_data['categorical_mappings']
 
-        area_enc = maps['AREA'].get(area, 0)
-        park_enc = maps['PARK_FACIL'].get(park_facil, 0)
-        build_enc = maps['BUILDTYPE'].get(build_type, 0)
-        util_enc = maps['UTILITY_AVAIL'].get(utility_avail, 0)
-        street_enc = maps['STREET'].get(street, 0)
-        mzzone_enc = maps['MZZONE'].get(mzzone, 0)
-
         vector = np.array([[
-            area_enc, int_sqft, n_bedroom, n_bathroom,
-            park_enc, build_enc, util_enc, street_enc,
-            mzzone_enc, property_age
+            maps['AREA'].get(area, 0),
+            int_sqft,
+            n_bedroom,
+            n_bathroom,
+            maps['PARK_FACIL'].get(park_facil, 0),
+            maps['BUILDTYPE'].get(build_type, 0),
+            maps['UTILITY_AVAIL'].get(utility_avail, 0),
+            maps['STREET'].get(street, 0),
+            maps['MZZONE'].get(mzzone, 0),
+            property_age
         ]])
 
         model = model_data['model']
@@ -122,18 +137,18 @@ def predict():
                 'forecast3Yr': int(predicted_price * (1 + growth) ** 3),
                 'forecast5Yr': int(predicted_price * (1 + growth) ** 5),
                 'investmentGrade': "Good",
-                'explanation': f"Predicted price Rs.{predicted_price}"
+                'explanation': f"Model predicted price for {area.title()} is ₹{predicted_price}"
             }
         })
 
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
 
-# ---------------- API: CONTACT ----------------
-
+# ---------------- CONTACT ----------------
 @app.route('/api/contacts', methods=['POST'])
 def save_contact():
     data = request.get_json() or {}
+
     name = data.get('name', '').strip()
     email = data.get('email', '').strip()
     msg = data.get('message', '').strip()
@@ -155,8 +170,8 @@ def save_contact():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
-# ---------------- RUN ----------------
 
+# ---------------- RUN ----------------
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port, debug=False)
