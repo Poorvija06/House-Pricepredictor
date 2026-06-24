@@ -15,8 +15,11 @@ app.secret_key = os.environ.get("SECRET_KEY", "chennai_super_secret_property_key
 CORS(app)
 
 # ---------------- CONFIG ----------------
-DB_FILE = os.path.join('data', 'housing_contacts.db')
-MODEL_PATH = os.path.join('data', 'model.pkl')
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, 'data', 'model.pkl')
+DB_FILE = os.path.join(BASE_DIR, 'data', 'housing_contacts.db')
+print("MODEL PATH:", MODEL_PATH)
+print("EXISTS:", os.path.exists(MODEL_PATH))
 
 os.makedirs('data', exist_ok=True)
 
